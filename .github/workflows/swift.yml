@@ -24,7 +24,7 @@ jobs:
       run: swift build -c release -v
     - name: Multi-part download smoke test
       run: |
-        .build/release/bigdl https://ash-speed.hetzner.com/100MB.bin test.bin --async
+        .build/release/bigdl https://testfile.to/dl/100mb test.bin --async
         test -f test.bin
         actual_size=$(stat -f%z test.bin)
         min_size=$((90 * 1000 * 1000))
