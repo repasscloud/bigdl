@@ -20,3 +20,15 @@ jobs:
       run: swift build -v
     - name: Run tests
       run: swift test -v
+    - name: Build release
+      run: swift build -c release -v
+    - name: Multi-part download smoke test
+      run: |
+        .build/release/bigdl https://ash-speed.hetzner.com/100MB.bin test.bin --async
+        test -f test.bin
+        actual_size=$(stat -f%z test.bin)
+        min_size=$((90 * 1000 * 1000))
+        if [ "$actual_size" -lt "$min_size" ]; then
+          echo "expected test.bin to be at least $min_size bytes, got $actual_size"
+          exit 1
+        fi

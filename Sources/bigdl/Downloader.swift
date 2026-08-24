@@ -1,90 +1,12 @@
 import Foundation
 
-@main
-struct BigDL {
-    static let version: String = "0.1.0"
-
-    static let help: String = """
-    bigdl \(version)
-
-    Usage:
-      bigdl <url> [output]
-      bigdl --help
-      bigdl --version
-
-    Arguments:
-      url             URL of the file to download
-      output          Optional output filename
-
-    Options:
-      -h, --help      Show this help
-      -v, --version   Show version
-
-    Examples:
-      bigdl https://testfile.to/dl/1gb
-      bigdl https://testfile.to/dl/1gb download.bin
-    """
-
-    static func main() async {
-        do {
-            let arguments = Array(CommandLine.arguments.dropFirst())
-
-            guard let firstArgument = arguments.first else {
-                print(help)
-                return
-            }
-
-            switch firstArgument {
-            case "-h", "--help":
-                print(help)
-                return
-
-            case "-v", "--version":
-                print("bigdl \(version)")
-                return
-
-            default:
-                break
-            }
-
-            guard let url = URL(string: firstArgument) else {
-                throw DownloadError.invalidURL
-            }
-
-            let outputURL: URL
-
-            if arguments.count >= 2 {
-                outputURL = URL(
-                    fileURLWithPath: arguments[1]
-                )
-            } else {
-                outputURL = URL(
-                    fileURLWithPath: url.lastPathComponent.isEmpty
-                        ? "download.bin"
-                        : url.lastPathComponent
-                )
-            }
-
-            let downloader = Downloader(
-                url: url,
-                outputURL: outputURL
-            )
-
-            try await downloader.download()
-
-        } catch {
-            fputs("error: \(error)\n", stderr)
-            exit(1)
-        }
-    }
-}
-
 enum DownloadError: Error, CustomStringConvertible {
     case invalidURL
     case invalidResponse
     case serverError(Int)
     case rangeNotSupported
     case unexpectedStatus(Int)
+    case unknownContentLength
 
     var description: String {
         switch self {
@@ -102,6 +24,9 @@ enum DownloadError: Error, CustomStringConvertible {
 
         case .unexpectedStatus(let status):
             "Unexpected HTTP status \(status)"
+
+        case .unknownContentLength:
+            "Server did not report a content length"
         }
     }
 }
@@ -373,19 +298,6 @@ final class Downloader: NSObject, URLSessionDataDelegate, @unchecked Sendable {
         }
     }
 
-    private func fileSize(at url: URL) -> Int64 {
-        guard
-            let attributes = try? FileManager.default.attributesOfItem(
-                atPath: url.path
-            ),
-            let size = attributes[.size] as? NSNumber
-        else {
-            return 0
-        }
-
-        return size.int64Value
-    }
-
     private func parseTotalSize(
         fromContentRange value: String?
     ) -> Int64? {
@@ -427,37 +339,4 @@ final class Downloader: NSObject, URLSessionDataDelegate, @unchecked Sendable {
             continuation.resume()
         }
     }
-}
-
-func formatBytes(_ bytes: Int64) -> String {
-    let formatter = ByteCountFormatter()
-
-    formatter.countStyle = .binary
-
-    return formatter.string(
-        fromByteCount: bytes
-    )
-}
-
-func formatDuration(_ seconds: Double) -> String {
-    let total = Int(seconds)
-
-    let hours = total / 3600
-    let minutes = total % 3600 / 60
-    let seconds = total % 60
-
-    if hours > 0 {
-        return String(
-            format: "%02d:%02d:%02d",
-            hours,
-            minutes,
-            seconds
-        )
-    }
-
-    return String(
-        format: "%02d:%02d",
-        minutes,
-        seconds
-    )
 }
