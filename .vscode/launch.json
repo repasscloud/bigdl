@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:bigdl}",
+            "name": "Debug bigdl",
+            "target": "bigdl",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug bigdl"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:bigdl}",
+            "name": "Release bigdl",
+            "target": "bigdl",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release bigdl"
+        }
+    ]
+}
