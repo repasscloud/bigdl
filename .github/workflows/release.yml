@@ -1,0 +1,71 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v6.1.0
+
+      - name: Determine version
+        id: version
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Extract changelog section
+        id: changelog
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          notes="$(awk -v ver="$version" '
+            $0 ~ "^## \\[" ver "\\]" { found=1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md)"
+
+          if [ -z "$notes" ]; then
+            echo "No CHANGELOG.md section found for version $version" >&2
+            exit 1
+          fi
+
+          {
+            echo "notes<<EOF"
+            echo "$notes"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build release binary
+        run: swift build -c release
+
+      - name: Package release archive
+        id: package
+        run: |
+          name="bigdl-${{ steps.version.outputs.tag }}-macos"
+          staging="$(mktemp -d)/${name}"
+          mkdir -p "$staging"
+
+          cp .build/release/bigdl "$staging/"
+          cp README.md "$staging/"
+          cp LICENSE "$staging/"
+
+          archive="${name}.tar.gz"
+          tar -C "$(dirname "$staging")" -czf "$archive" "$name"
+
+          echo "archive=${archive}" >> "$GITHUB_OUTPUT"
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ steps.version.outputs.tag }}
+          tag_name: ${{ steps.version.outputs.tag }}
+          body: ${{ steps.changelog.outputs.notes }}
+          files: ${{ steps.package.outputs.archive }}
