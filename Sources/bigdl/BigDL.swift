@@ -7,7 +7,7 @@ struct BigDL {
     static let defaultThreads = 4
 
     static let copyrightNotice: String = """
-    Copyright (C) 2026 Danijel-James Wynyard
+    Copyright (C) 2026 RePass Cloud
     License GPLv3+: GNU GPL version 3 or later <https://www.gnu.org/licenses/gpl-3.0.html>
     This is free software: you are free to change and redistribute it.
     There is NO WARRANTY, to the extent permitted by law.
