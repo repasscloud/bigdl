@@ -13,6 +13,14 @@ resumable single-connection downloads and concurrent multi-part downloads.
 
 ## Installation
 
+### Homebrew
+
+```bash
+brew install repasscloud/tap/bigdl
+```
+
+### From source
+
 Requires Swift 6.3+ and macOS 15+.
 
 ```bash
