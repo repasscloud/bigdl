@@ -4,28 +4,91 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: >-
+          Tag to release (e.g. v0.2.0). Must already exist. Only needed
+          when running manually instead of via a tag push.
+        required: true
 
 permissions:
   contents: write
 
 jobs:
+  build:
+    runs-on: macos-latest
+
+    strategy:
+      matrix:
+        include:
+          - triple: aarch64-apple-darwin
+            arch: arm64
+          - triple: x86_64-apple-darwin
+            arch: x86_64
+
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Determine version
+        id: version
+        env:
+          INPUT_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          tag="$INPUT_TAG"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build release binary
+        run: swift build -c release --arch ${{ matrix.arch }}
+
+      - name: Package release archive
+        id: package
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          triple="${{ matrix.triple }}"
+          name="bigdl-${version}-${triple}"
+
+          staging="$(mktemp -d)/${name}"
+          mkdir -p "$staging"
+
+          cp ".build/${{ matrix.arch }}-apple-macosx/release/bigdl" "$staging/"
+          cp README.md "$staging/"
+          cp LICENSE "$staging/"
+
+          archive="${name}.tar.gz"
+          tar -C "$(dirname "$staging")" -czf "$archive" "$name"
+          shasum -a 256 "$archive" | awk '{ print $1 }' > "${archive}.sha256"
+
+          echo "archive=${archive}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bigdl-${{ matrix.triple }}
+          path: |
+            ${{ steps.package.outputs.archive }}
+            ${{ steps.package.outputs.archive }}.sha256
+          if-no-files-found: error
+
   release:
+    needs: build
     runs-on: macos-latest
 
     steps:
       - uses: actions/checkout@v7.0.1
-
-      - name: Determine version
-        id: version
-        run: |
-          tag="${GITHUB_REF_NAME}"
-          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
-          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Extract changelog section
         id: changelog
         run: |
-          version="${{ steps.version.outputs.version }}"
+          version="${{ needs.build.outputs.version }}"
           notes="$(awk -v ver="$version" '
             $0 ~ "^## \\[" ver "\\]" { found=1; next }
             found && /^## \[/ { exit }
@@ -43,29 +106,15 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Build release binary
-        run: swift build -c release
-
-      - name: Package release archive
-        id: package
-        run: |
-          name="bigdl-${{ steps.version.outputs.tag }}-macos"
-          staging="$(mktemp -d)/${name}"
-          mkdir -p "$staging"
-
-          cp .build/release/bigdl "$staging/"
-          cp README.md "$staging/"
-          cp LICENSE "$staging/"
-
-          archive="${name}.tar.gz"
-          tar -C "$(dirname "$staging")" -czf "$archive" "$name"
-
-          echo "archive=${archive}" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
 
       - name: Create release
         uses: softprops/action-gh-release@v3.0.2
         with:
-          name: ${{ steps.version.outputs.tag }}
-          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ needs.build.outputs.tag }}
+          tag_name: ${{ needs.build.outputs.tag }}
           body: ${{ steps.changelog.outputs.notes }}
-          files: ${{ steps.package.outputs.archive }}
+          files: dist/*
